@@ -30,21 +30,19 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#ifdef _MSC_VER
+#include <windows.h>
+#else
 #include <sys/time.h>
+#endif
 
 #ifdef _MSC_VER
 #pragma warning(disable:4996)
 #pragma warning(disable:4244)
-#endif
-
-#ifdef WIN32
-  #define PLIST_API __declspec( dllexport )
-#else
-  #ifdef HAVE_FVISIBILITY
-    #define PLIST_API __attribute__((visibility("default")))
-  #else
-    #define PLIST_API
-  #endif
+#define strtoull _strtoui64
+#define UINT32_MAX _UI32_MAX
+#define INT64_MAX _I64_MAX
+#define UINT64_MAX _UI64_MAX
 #endif
 
 struct plist_data_s

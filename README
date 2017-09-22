@@ -6,6 +6,7 @@ A small portable C library to handle Apple Property List files in binary or XML.
 Requirements
 ============
 
+----gcc-----
 Software:
 	make
 	autoheader
@@ -19,9 +20,16 @@ Optional:
 	cython (Python bindings)
 	doxygen (Documentation)
 
+[OR]
+
+----msvc----
+Software:
+	Visual Studio 2010
+
 Installation
 ============
 
+----gcc-----
 To compile run:
 	./autogen.sh
 	make
@@ -32,6 +40,13 @@ you can pass them directly to ./autogen.sh like this:
 	./autogen.sh --prefix=/opt/local --without-cython
 	make
 	sudo make install
+
+[OR]
+
+----msvc----
+To compile run:
+	libcnary/libcnary.vcxproj
+	libplist.vcxproj
 
 Who/What/Where?
 ===============
@@ -65,4 +80,4 @@ libimobiledevice is an independent software library and has not been
 authorized, sponsored, or otherwise approved by Apple Inc.
 
 README Updated on:
-	2016-11-18
+	2017-09-22

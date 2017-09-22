@@ -30,7 +30,9 @@
 #include <assert.h>
 
 #include <ctype.h>
+#ifndef _MSC_VER
 #include <inttypes.h>
+#endif
 
 #include <plist/plist.h>
 #include "plist.h"
@@ -48,7 +50,12 @@
 #define BPLIST_VERSION          ((uint8_t*)"00")
 #define BPLIST_VERSION_SIZE     2
 
+#ifdef _MSC_VER
+#pragma pack(push, 1)
+typedef struct {
+#else
 typedef struct __attribute__((packed)) {
+#endif
     uint8_t unused[6];
     uint8_t offset_size;
     uint8_t ref_size;
@@ -56,6 +63,9 @@ typedef struct __attribute__((packed)) {
     uint64_t root_object_index;
     uint64_t offset_table_offset;
 } bplist_trailer_t;
+#ifdef _MSC_VER
+#pragma pack(pop)
+#endif
 
 enum
 {
@@ -86,6 +96,18 @@ union plist_uint_ptr
     uint64_t *u64ptr;
 };
 
+#ifdef _MSC_VER
+template<typename T>
+T get_unaligned(T *ptr)
+{
+#pragma pack(push, 1)
+	struct packed {
+		T __v;
+	} *__p = (packed *)ptr;
+#pragma pack(pop)
+	return __p->__v;
+}
+#else
 #define get_unaligned(ptr)			  \
   ({                                              \
     struct __attribute__((packed)) {		  \
@@ -93,6 +115,7 @@ union plist_uint_ptr
     } *__p = (void *) (ptr);			  \
     __p->__v;					  \
   })
+#endif
 
 
 #ifndef bswap16
@@ -147,6 +170,19 @@ union plist_uint_ptr
 #define beNtoh(x,n) be64toh(x << ((8-n) << 3))
 #endif
 
+#ifdef _MSC_VER
+uint64_t UINT_TO_HOST(const char *x, uint16_t n)
+{
+	union plist_uint_ptr __up;
+	__up.src = (n > 8) ? x + (n - 8) : x;
+	return (n >= 8 ? be64toh( get_unaligned(__up.u64ptr) ) :
+		(n == 4 ? be32toh( get_unaligned(__up.u32ptr) ) :
+		(n == 2 ? be16toh( get_unaligned(__up.u16ptr) ) :
+		(n == 1 ? *__up.u8ptr :
+		beNtoh( get_unaligned(__up.u64ptr), n)
+		)))); 
+}
+#else
 #define UINT_TO_HOST(x, n) \
 	({ \
 		union plist_uint_ptr __up; \
@@ -158,6 +194,7 @@ union plist_uint_ptr
 		beNtoh( get_unaligned(__up.u64ptr), n) \
 		)))); \
 	})
+#endif
 
 #define get_needed_bytes(x) \
 		( ((uint64_t)x) < (1ULL << 8) ? 1 : \
@@ -188,7 +225,7 @@ union plist_uint_ptr
 static int uint64_mul_overflow(uint64_t a, uint64_t b, uint64_t *res)
 {
     *res = a * b;
-    return (a > UINT64_MAX / b);
+	return (a > UINT64_MAX / b);
 }
 #endif
 
@@ -405,7 +442,7 @@ static plist_t parse_unicode_node(const char **bnode, uint64_t size)
     tmpstr[items_written] = '\0';
 
     data->type = PLIST_STRING;
-    data->strval = realloc(tmpstr, items_written+1);
+    data->strval = (char *)realloc(tmpstr, items_written+1);
     if (!data->strval)
         data->strval = tmpstr;
     data->length = items_written;
@@ -501,8 +538,8 @@ static plist_t parse_dict_node(struct bplist_data *bplist, const char** bnode, u
             return NULL;
         }
 
-        node_attach(node, key);
-        node_attach(node, val);
+        node_attach((node_t *)node, (node_t *)key);
+        node_attach((node_t *)node, (node_t *)val);
     }
 
     return node;
@@ -546,7 +583,7 @@ static plist_t parse_array_node(struct bplist_data *bplist, const char** bnode, 
             return NULL;
         }
 
-        node_attach(node, val);
+        node_attach((node_t *)node, (node_t *)val);
     }
 
     return node;
@@ -557,7 +594,7 @@ static plist_t parse_uid_node(const char **bnode, uint8_t size)
     plist_data_t data = plist_new_plist_data();
     size = size + 1;
     data->intval = UINT_TO_HOST(*bnode, size);
-    if (data->intval > UINT32_MAX) {
+	if (data->intval > UINT32_MAX) {
         PLIST_BIN_ERR("%s: value %" PRIu64 " too large for UID node (must be <= %u)\n", __func__, (uint64_t)data->intval, UINT32_MAX);
         free(data);
         return NULL;
@@ -1207,7 +1244,7 @@ PLIST_API void plist_to_bin(plist_t plist, char **plist_bin, uint32_t * length)
     //serialize plist
     ser_s.objects = objects;
     ser_s.ref_table = ref_table;
-    serialize_plist(plist, &ser_s);
+    serialize_plist((node_t *)plist, &ser_s);
 
     //now stream to output buffer
     offset_size = 0;			//unknown yet
@@ -1272,10 +1309,10 @@ PLIST_API void plist_to_bin(plist_t plist, char **plist_bin, uint32_t * length)
             write_data(bplist_buff, data->buff, data->length);
             break;
         case PLIST_ARRAY:
-            write_array(bplist_buff, ptr_array_index(objects, i), ref_table, ref_size);
+            write_array(bplist_buff, (node_t *)ptr_array_index(objects, i), ref_table, ref_size);
             break;
         case PLIST_DICT:
-            write_dict(bplist_buff, ptr_array_index(objects, i), ref_table, ref_size);
+            write_dict(bplist_buff, (node_t *)ptr_array_index(objects, i), ref_table, ref_size);
             break;
         case PLIST_DATE:
             write_date(bplist_buff, data->realval);
@@ -1313,7 +1350,7 @@ PLIST_API void plist_to_bin(plist_t plist, char **plist_bin, uint32_t * length)
     byte_array_append(bplist_buff, &trailer, sizeof(bplist_trailer_t));
 
     //set output buffer and size
-    *plist_bin = bplist_buff->data;
+    *plist_bin = (char *)bplist_buff->data;
     *length = bplist_buff->len;
 
     bplist_buff->data = NULL; // make sure we don't free the output buffer
